@@ -1,1 +1,0 @@
-import{e,d as r,b as c,g as o,p as n,t as i,s as d}from"./index-DZrLkeQP.js";const p=async s=>{const t=e.currentUser;if(!t)return{status:"error",message:"User not logged in"};const a=r(c,"users",t.uid,"cart",s.id);return(await o(a)).exists()?await n(a,{quantity:i(1),price:s.price}):await d(a,{...s,quantity:1}),{status:"success",message:"Product added to cart"}};export{p as a};
