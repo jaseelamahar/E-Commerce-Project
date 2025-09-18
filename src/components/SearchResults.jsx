@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useProducts } from "../context/ProductContext";
 import Card from "./Card";
@@ -10,25 +10,26 @@ const SearchResults = () => {
   const queryParams = new URLSearchParams(location.search);
   const query = queryParams.get("query") || "";
 
-  const filteredProducts = products.filter((product) => {
+  // Recalculate filteredProducts whenever products or query changes
+  const filteredProducts = useMemo(() => {
     const term = query.toLowerCase();
 
-    const nameMatch = product.name?.toLowerCase().includes(term);
-    const categoryMatch = product.category?.toLowerCase().includes(term);
-    const descriptionMatch = product.description?.toLowerCase().includes(term);
+    return products.filter((product) => {
+      const nameMatch = product.name?.toLowerCase().includes(term);
+      const categoryMatch = product.category?.toLowerCase().includes(term);
+      const descriptionMatch = product.description?.toLowerCase().includes(term);
 
-    // Handle color as array or string
-    const colorMatch = Array.isArray(product.color)
-      ? product.color.some((c) => c.toLowerCase().includes(term))
-      : product.color?.toLowerCase().includes(term);
+      const colorMatch = Array.isArray(product.color)
+        ? product.color.some((c) => c.toLowerCase().includes(term))
+        : product.color?.toLowerCase().includes(term);
 
-    // Handle size as array or string
-    const sizeMatch = Array.isArray(product.size)
-      ? product.size.some((s) => s.toLowerCase().includes(term))
-      : product.size?.toLowerCase().includes(term);
+      const sizeMatch = Array.isArray(product.size)
+        ? product.size.some((s) => s.toLowerCase().includes(term))
+        : product.size?.toLowerCase().includes(term);
 
-    return nameMatch || categoryMatch || descriptionMatch || colorMatch || sizeMatch;
-  });
+      return nameMatch || categoryMatch || descriptionMatch || colorMatch || sizeMatch;
+    });
+  }, [products, query]);
 
   return (
     <div className="container mx-auto p-6">

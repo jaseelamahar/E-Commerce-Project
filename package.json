@@ -1,18 +1,25 @@
 {
   "name": "shoppy",
+  "homepage": "https://jaseelamahar.github.io/E-Commerce-Project",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist -b gh-pages -r https://github.com/jaseelamahar/E-Commerce-Project.git",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fortawesome/free-regular-svg-icons": "^7.0.1",
+    "@fortawesome/free-solid-svg-icons": "^7.0.1",
+    "@fortawesome/react-fontawesome": "^3.0.2",
     "@tailwindcss/vite": "^4.1.11",
     "aos": "^2.3.4",
     "firebase": "^12.1.0",
+    "prop-types": "^15.8.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-icons": "^5.5.0",

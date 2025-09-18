@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { auth, db } from "../../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, onSnapshot } from "firebase/firestore";
@@ -16,12 +16,16 @@ const Navbar = () => {
   const [cartCount, setCartCount] = useState(0);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [menu, setMenu] = useState([{ id: 1, name: "Home", link: "/" }]);
+  const [categories, setCategories] = useState([]);
   const dropdownRef = useRef(null);
   const searchRef = useRef(null);
   const navigate = useNavigate();
 
-  // Fetch categories dynamically
+  const menu = useMemo(
+    () => [{ id: 1, name: "Home", link: "/" }, ...categories],
+    [categories]
+  );
+
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "categories"), (snapshot) => {
       const categoriesData = snapshot.docs.map((doc, index) => ({
@@ -29,12 +33,11 @@ const Navbar = () => {
         name: doc.data().name,
         link: `/category/${doc.data().name}`,
       }));
-      setMenu([{ id: 1, name: "Home", link: "/" }, ...categoriesData]);
+      setCategories(categoriesData);
     });
     return () => unsubscribe();
   }, []);
 
-  // Auth & cart listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -56,7 +59,6 @@ const Navbar = () => {
     return () => unsubscribe();
   }, []);
 
-  // Close dropdown/search when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -72,13 +74,11 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Logout
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/login");
   };
 
-  // Trigger search
   const handleSearch = () => {
     if (searchTerm.trim()) {
       navigate(`/search?query=${encodeURIComponent(searchTerm.trim())}`);
@@ -88,14 +88,13 @@ const Navbar = () => {
   return (
     <div>
       {/* Upper Navbar */}
-      <div className="bg-gray-300">
-        <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center py-2 px-4">
-          {/* Logo */}
+      <div className="bg-gradient-to-r from-pink-100 via-sky-100 to-pink-100 dark:from-gray-950 dark:via-gray-900 transition-colors duration-500">
+        <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center py-3 px-4">
           <Link
             to="/"
             className="font-bold text-2xl sm:text-3xl flex gap-2 items-center mb-2 sm:mb-0"
           >
-            <img src={Logo} alt="Logo" className="w-16 sm:w-20" />
+            <img src={Logo} alt="Logo" className="w-16 sm:w-20 rounded-lg shadow-md" />
           </Link>
 
           {/* Search, Cart & Auth */}
@@ -107,17 +106,17 @@ const Navbar = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="w-full sm:w-[200px] group-hover:w-[300px] transition-all duration-300 rounded-full border border-gray-700 px-3 py-1 focus:border-orange-400 outline-none"
+                className="w-full sm:w-[200px] group-hover:w-[300px] transition-all duration-300 rounded-full border border-gray-400 dark:border-gray-600 px-3 py-1 focus:ring-2 focus:ring-pink-400 focus:outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               />
               <IoMdSearch
                 onClick={handleSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-300 cursor-pointer"
               />
             </div>
 
             <button
               onClick={() => navigate("/cart")}
-              className="bg-amber-300 text-white py-2 px-4 rounded-full flex items-center gap-2 transition w-full sm:w-auto justify-center"
+              className="bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 text-white py-2 px-4 rounded-full flex items-center gap-2 transition shadow-md hover:shadow-xl w-full sm:w-auto justify-center"
             >
               <FaCartShopping size={20} />
               {cartCount > 0 && (
@@ -128,17 +127,17 @@ const Navbar = () => {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center gap-1 text-gray-700 hover:text-amber-500 transition w-full sm:w-auto justify-center"
+                className="flex items-center gap-1 text-pink-700 hover:text-black-500 transition w-full sm:w-auto justify-center"
               >
                 <VscAccount size={24} />
               </button>
 
               {dropdownOpen && (
-                <div className="absolute right-0 mt-2 w-32 bg-white shadow-lg rounded-md py-2 z-50">
+                <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 shadow-lg rounded-md py-2 z-50">
                   {user ? (
                     <button
                       onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-pink-50 dark:hover:bg-gray-700"
                     >
                       Logout
                     </button>
@@ -146,13 +145,13 @@ const Navbar = () => {
                     <>
                       <Link
                         to="/login"
-                        className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
+                        className="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-pink-50 dark:hover:bg-gray-700"
                       >
                         Login
                       </Link>
                       <Link
                         to="/signup"
-                        className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
+                        className="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-pink-50 dark:hover:bg-gray-700"
                       >
                         Signup
                       </Link>
@@ -166,11 +165,14 @@ const Navbar = () => {
       </div>
 
       {/* Lower Navbar */}
-      <div className="bg-white border-t border-b border-blue-50">
-        <ul className="flex flex-wrap justify-center gap-6 text-gray-700 py-2 font-medium">
+      <div className="bg-white border-t border-b border-pink-50 dark:bg-gray-900">
+        <ul className="flex flex-wrap justify-center gap-6 text-pink-400 dark:text-blue-100 py-2 font-medium">
           {menu.map((data) => (
             <li key={data.id}>
-              <Link to={data.link} className="hover:text-amber-500 transition">
+              <Link
+                to={data.link}
+                className="hover:text-pink-500 dark:hover:text-pink-400 transition"
+              >
                 {data.name}
               </Link>
             </li>

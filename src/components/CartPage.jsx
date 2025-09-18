@@ -1,47 +1,51 @@
-
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { auth, db } from "../firebase";
-import { collection, doc, onSnapshot, updateDoc, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy
+} from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { ToastContainer, toast } from "react-toastify";
+import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const CartPage = () => {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [orders, setOrders] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [latestOrderId, setLatestOrderId] = useState(null);
+  const [hasOrders, setHasOrders] = useState(false);
   const navigate = useNavigate();
-  const toastShown = useRef(false); // <- prevents duplicate toast
 
-useEffect(() => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    if (!toastShown.current) {
-      toast.info("Please login to see your cart");
-      toastShown.current = true;
+  // Fetch cart items
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) {
+      toast.info("Please login to see your cart", { toastId: "login-toast" });
+      navigate("/login");
+      return;
     }
-    navigate("/login");
-    return; // ✅ Important: exit early to avoid null user
-  }
 
-
+    // Cart
     const cartRef = collection(db, "users", user.uid, "cart");
     const unsubscribeCart = onSnapshot(cartRef, (snapshot) => {
-      const items = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setCartItems(items);
       setLoading(false);
     });
 
+    // Check if user has previous orders
     const ordersRef = collection(db, "users", user.uid, "orders");
-    const unsubscribeOrders = onSnapshot(ordersRef, (snapshot) => {
-      const orderList = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
-      setOrders(orderList);
+    const q = query(ordersRef, orderBy("createdAt", "desc"));
+    const unsubscribeOrders = onSnapshot(q, (snapshot) => {
+      setHasOrders(snapshot.docs.length > 0);
     });
 
     return () => {
@@ -50,122 +54,196 @@ useEffect(() => {
     };
   }, [navigate]);
 
-  const incrementQuantity = async (item) => {
-    const itemRef = doc(db, "users", auth.currentUser.uid, "cart", item.id);
-    await updateDoc(itemRef, { quantity: item.quantity + 1 });
+  const increment = async (item) => {
+    const ref = doc(db, "users", auth.currentUser.uid, "cart", item.id);
+    await updateDoc(ref, { quantity: item.quantity + 1 });
   };
 
-  const decrementQuantity = async (item) => {
-    const itemRef = doc(db, "users", auth.currentUser.uid, "cart", item.id);
-    if (item.quantity > 1) {
-      await updateDoc(itemRef, { quantity: item.quantity - 1 });
-    } else {
-      await deleteDoc(itemRef);
-    }
+  const decrement = async (item) => {
+    const ref = doc(db, "users", auth.currentUser.uid, "cart", item.id);
+    if (item.quantity > 1) await updateDoc(ref, { quantity: item.quantity - 1 });
+    else await deleteDoc(ref);
   };
 
   const removeItem = async (item) => {
-    const itemRef = doc(db, "users", auth.currentUser.uid, "cart", item.id);
-    await deleteDoc(itemRef);
+    const ref = doc(db, "users", auth.currentUser.uid, "cart", item.id);
+    await deleteDoc(ref);
   };
 
-  const totalPrice = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+  const totalPrice = cartItems.reduce(
+    (total, item) => total + item.price * item.quantity,
+    0
+  );
 
   const placeOrder = async () => {
-    const user = auth.currentUser;
-    if (!user || cartItems.length === 0) return;
-
-    const ordersRef = collection(db, "users", user.uid, "orders");
-    await addDoc(ordersRef, {
-      items: cartItems,
-      total: totalPrice,
-      status: "ordered",
-      createdAt: serverTimestamp(),
-    });
-
-    // Clear cart
-    for (const item of cartItems) {
-      await deleteDoc(doc(db, "users", user.uid, "cart", item.id));
+    if (!auth.currentUser || cartItems.length === 0) {
+      toast.error("Cart is empty or you are not logged in");
+      return;
     }
 
-    toast.success("Order placed successfully!");
+    try {
+      const tracking = "TRK" + Math.floor(Math.random() * 1000000);
+      setTrackingNumber(tracking);
+
+      const ordersRef = collection(db, "users", auth.currentUser.uid, "orders");
+      const docRef = await addDoc(ordersRef, {
+        items: cartItems,
+        total: totalPrice,
+        email: auth.currentUser.email,
+        status: "pending",
+        tracking_number: tracking,
+        tracking_status: "Pending",
+        createdAt: serverTimestamp(),
+      });
+
+      setLatestOrderId(docRef.id);
+      setShowModal(true);
+    } catch (error) {
+      console.error("🔥 Error placing order:", error);
+      toast.error("Failed to place order. Check console for details.");
+    }
   };
 
-  if (loading) return <div className="p-6 text-center">Loading cart...</div>;
-  if (!cartItems.length && !orders.length) return <div className="p-6 text-center">Your cart is empty.</div>;
+  const handleConfirmOrder = async () => {
+    if (!latestOrderId) return;
+
+    const orderRef = doc(db, "users", auth.currentUser.uid, "orders", latestOrderId);
+    await updateDoc(orderRef, {
+      status: "confirmed",
+      tracking_status: "In Transit",
+    });
+
+    if (cartItems.length > 0) {
+      await Promise.all(
+        cartItems.map((item) =>
+          deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", item.id))
+        )
+      );
+      setCartItems([]);
+    }
+
+    setShowModal(false);
+    toast.success("Order Confirmed ✅");
+    navigate("/orderhistory");
+  };
+
+  const handleCancelOrder = async () => {
+    if (!latestOrderId) return;
+
+    const orderRef = doc(db, "users", auth.currentUser.uid, "orders", latestOrderId);
+    await updateDoc(orderRef, {
+      status: "cancelled",
+      tracking_status: "Cancelled",
+    });
+
+    setShowModal(false);
+    toast.info("Order Cancelled ❌");
+  };
+
+  if (loading) return <div className="text-center p-6">Loading your cart...</div>;
+
+  // Empty cart message with Happy Shopping
+  if (cartItems.length === 0) {
+    return (
+      <div className="text-center p-6 text-gray-500 flex flex-col items-center gap-4">
+        <h2 className="text-xl font-semibold">Your cart is empty 🛍️</h2>
+        <p>Happy shopping! Explore our latest collection 👔</p>
+        {hasOrders && (
+          <button
+            onClick={() => navigate("/orderhistory")}
+            className="bg-gray-200 text-gray-900 px-4 py-1 rounded-full hover:bg-gray-300 transition text-sm font-medium"
+          >
+            View Orders
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="container mx-auto p-6">
-      <ToastContainer position="top-right" autoClose={3000} />
-      
-      <h2 className="text-3xl font-bold mb-6">Your Cart</h2>
+    <div className="max-w-6xl mx-auto p-6 flex flex-col gap-6">
+      <ToastContainer />
+      <h1 className="text-3xl font-bold mb-4">Your Cart</h1>
 
-      {cartItems.length > 0 && (
-        <div className="flex flex-col gap-4 mb-6">
-          {cartItems.map((item) => (
-            <div key={item.id} className="flex flex-col md:flex-row items-center justify-between border p-4 rounded-lg shadow-sm gap-4">
-              <img src={item.image} alt={item.name} className="w-32 h-32 object-cover rounded-lg" />
-              <div className="flex-1 flex flex-col gap-2">
-                <h3 className="text-xl font-semibold">{item.name}</h3>
-                <p className="text-gray-600">Rs{item.price.toFixed(2)}</p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => decrementQuantity(item)} className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">-</button>
-                  <span className="px-3 py-1 border rounded">{item.quantity}</span>
-                  <button onClick={() => incrementQuantity(item)} className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button>
-                  <button onClick={() => removeItem(item)} className="ml-4 text-red-500 hover:text-red-700">Remove</button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+      {hasOrders && (
+        <button
+          onClick={() => navigate("/orderhistory")}
+          className="bg-gray-200 text-gray-900 px-3 py-1 rounded-full hover:bg-gray-300 transition text-xs font-medium mb-4 w-max"
+        >
+          View Orders
+        </button>
       )}
 
-      {cartItems.length > 0 && (
-        <div className="mt-6 flex justify-end items-center gap-6">
-          <h3 className="text-2xl font-bold">Total: Rs{totalPrice.toFixed(2)}</h3>
-          <button
-            onClick={placeOrder}
-            className="bg-amber-300 text-white px-6 py-2 rounded-full hover:bg-amber-400 transition"
-          >
-            Order Now
-          </button>
+      {cartItems.map((item) => (
+        <div
+          key={item.id}
+          className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border rounded-2xl shadow-md hover:shadow-xl transition bg-white"
+        >
+          <img src={item.image} alt={item.name} className="w-28 h-28 object-cover rounded-xl" />
+          <div className="flex-1 flex flex-col gap-1 text-center sm:text-left">
+            <h3 className="font-semibold text-lg">{item.name}</h3>
+            {item.selectedColor && <span>Color: {item.selectedColor}</span>}
+            {item.selectedSize && <span>Size: {item.selectedSize}</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => decrement(item)}
+              className="px-3 py-1 bg-gray-100 rounded-full hover:bg-gray-200 transition"
+            >
+              -
+            </button>
+            <span className="px-3 py-1 border rounded-full">{item.quantity}</span>
+            <button
+              onClick={() => increment(item)}
+              className="px-3 py-1 bg-gray-100 rounded-full hover:bg-gray-200 transition"
+            >
+              +
+            </button>
+          </div>
+          <div className="flex flex-col items-center sm:items-end gap-1">
+            <span className="font-bold text-lg">₹{(item.price * item.quantity).toFixed(2)}</span>
+            <button
+              onClick={() => removeItem(item)}
+              className="text-red-500 hover:text-red-700 text-sm"
+            >
+              Remove
+            </button>
+          </div>
         </div>
-      )}
+      ))}
 
-      {orders.length > 0 && (
-        <div className="mt-12">
-          <h2 className="text-3xl font-bold mb-4">Order History</h2>
-          {orders.map((order) => (
-            <div key={order.id} className="border p-4 rounded-lg shadow-sm mb-4">
-              <h3 className="font-semibold">Order ID: {order.id}</h3>
-              <p>Total: ${order.total.toFixed(2)}</p>
-              <p className="text-gray-500 text-sm">Ordered on: {order.createdAt?.toDate().toLocaleString()}</p>
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4">
+        <h2 className="text-2xl font-bold">Total: ₹{totalPrice.toFixed(2)}</h2>
+        <button
+          onClick={placeOrder}
+          className="bg-amber-400 text-gray-900 px-6 py-2 rounded-full hover:bg-amber-500 transition font-semibold text-lg"
+        >
+          Place Order
+        </button>
+      </div>
 
-              <div className="mt-2">
-                {order.items.map((item) => (
-                  <div key={item.id} className="flex justify-between border-b py-1">
-                    <span>{item.name} x {item.quantity}</span>
-                    <span>${(item.price * item.quantity).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-2 flex gap-2">
-                {order.status === "ordered" && (
-                  <button className="px-4 py-1 bg-blue-500 text-white rounded">Ordered</button>
-                )}
-                {order.status === "confirmed" && (
-                  <button className="px-4 py-1 bg-green-500 text-white rounded">Confirmed</button>
-                )}
-                {order.status === "cancelled" && (
-                  <button className="px-4 py-1 bg-red-500 text-white rounded">Cancelled</button>
-                )}
-                {order.status === "available" && (
-                  <button className="px-4 py-1 bg-green-500 text-white rounded">Available</button>
-                )}
-              </div>
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/90 z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-md text-center">
+            <h2 className="text-2xl font-bold mb-2">👔 Order Placed!</h2>
+            <p className="mb-2">Once order is shipped, you cannot cancel.</p>
+            
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={handleConfirmOrder}
+                className="px-6 py-2 rounded-full bg-green-500 text-white hover:bg-green-600 transition font-medium"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                className="px-6 py-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition font-medium"
+              >
+                Cancel
+              </button>
             </div>
-          ))}
+          </div>
         </div>
       )}
     </div>

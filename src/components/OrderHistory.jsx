@@ -1,48 +1,61 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { auth, db } from "../firebase";
-import { collection, onSnapshot, orderBy, query, doc, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, doc, updateDoc } from "firebase/firestore";
+import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 const OrderHistory = () => {
   const [orders, setOrders] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate=useNavigate();
 
   useEffect(() => {
-    let unsubscribeOrders = () => {};
-
     const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
+      if (!currentUser) {
+        setUser(null);
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
 
-        const ordersRef = collection(db, "users", currentUser.uid, "orders");
-        const q = query(ordersRef, orderBy("createdAt", "desc"));
+      setUser(currentUser);
+      const ordersRef = collection(db, "users", currentUser.uid, "orders");
+      const q = query(ordersRef, orderBy("createdAt", "desc"));
 
-        unsubscribeOrders = onSnapshot(q, (snapshot) => {
+      const unsubscribeOrders = onSnapshot(
+        q,
+        (snapshot) => {
           const data = snapshot.docs.map((doc) => ({
             id: doc.id,
-            status: doc.data().status || "pending",
             ...doc.data(),
           }));
           setOrders(data);
           setLoading(false);
-        });
-      } else {
-        setUser(null);
-        setOrders([]);
-        setLoading(false);
-      }
+        },
+        (err) => {
+          console.error("Error fetching orders:", err);
+          toast.error("Failed to load orders");
+          setLoading(false);
+        }
+      );
+
+      return () => unsubscribeOrders();
     });
 
-    return () => {
-      unsubscribeAuth();
-      unsubscribeOrders();
-    };
+    return () => unsubscribeAuth();
   }, []);
 
   const updateOrderStatus = async (orderId, status) => {
     if (!user) return;
-    const orderRef = doc(db, "users", user.uid, "orders", orderId);
-    await updateDoc(orderRef, { status });
+    try {
+      const orderRef = doc(db, "users", user.uid, "orders", orderId);
+      await updateDoc(orderRef, { status });
+      toast.success("Order status updated");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update order status");
+    }
   };
 
   if (loading) return <div className="p-6 text-center">Loading orders...</div>;
@@ -50,82 +63,82 @@ const OrderHistory = () => {
   if (!orders.length) return <div className="p-6 text-center">No orders yet.</div>;
 
   return (
-    <div className="container mx-auto p-6">
-      <h2 className="text-2xl font-bold mb-6 text-center">Your Order History</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {orders.map((order) => (
-          <div
-            key={order.id}
-            className="bg-white border rounded-2xl shadow-lg p-4 hover:shadow-xl transition flex flex-col"
-          >
-            {/* Order Info */}
-            <div className="flex justify-between text-sm text-gray-600 mb-3">
-              <span className="font-semibold">Order ID:</span>
-              <span className="truncate max-w-[120px]">{order.id}</span>
-            </div>
-            <div className="flex justify-between text-sm text-gray-600 mb-3">
-              <span className="font-semibold">Date:</span>
-              <span>{order.createdAt?.toDate().toLocaleDateString()}</span>
-            </div>
+    <div className="max-w-6xl mx-auto p-6 flex flex-col gap-6">
+      <h1 className="text-3xl font-bold text-center mb-6">📦 Your Orders</h1>
 
-            {/* Order Items */}
-            <div className="border-t pt-3 space-y-3">
-              {order.items.map((item) => (
-                <div key={item.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={item.image || "https://via.placeholder.com/60"}
-                      alt={item.name}
-                      className="w-16 h-16 object-cover rounded-md"
-                    />
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-gray-500 text-sm">
-                        Qty: {item.quantity} | Size: {Array.isArray(item.size) ? item.size.join(", ") : item.size || "N/A"}
-                      </p>
-                      {item.color && <p className="text-gray-500 text-sm">Color: {item.color}</p>}
-                    </div>
-                  </div>
-                  <span className="font-semibold text-gray-800">
-                    Rs{(item.price * item.quantity).toFixed(2)}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Total */}
-            <div className="mt-4 flex justify-between items-center font-bold text-base">
-              <span>Total:</span>
-              <span className="text-indigo-600">Rs{order.total.toFixed(2)}</span>
-            </div>
-
-            {/* Status Buttons */}
-            <div className="mt-4 flex gap-2">
-              {order.status === "pending" && (
-                <button
-                  className="flex-1 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
-                  onClick={() => updateOrderStatus(order.id, "confirmed")}
-                >
-                  Available
-                </button>
-              )}
-              {order.status === "confirmed" && (
-                <button
-                  className="flex-1 px-4 py-2 bg-blue-400 text-white rounded cursor-not-allowed"
-                  disabled
-                >
-                  Ordered
-                </button>
-              )}
-              {order.status === "cancelled" && (
-                <span className="flex-1 px-4 py-2 bg-red-500 text-white rounded text-center">
-                  Cancelled
-                </span>
-              )}
-            </div>
+      {orders.map((order) => (
+        <div
+          key={order.id}
+          className="bg-white rounded-2xl shadow-md p-6 hover:shadow-lg transition flex flex-col gap-4"
+        >
+          {/* Order Info */}
+          <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
+            <span>Order ID: <span className="font-medium">{order.id}</span></span>
+            <span>{order.createdAt?.toDate().toLocaleDateString() || "—"}</span>
+         <button
+  onClick={() => navigate(`/dummy-tracking/${order.tracking_number}`)}
+  className="text-indigo-600 underline text-sm"
+>
+  Track Order
+</button>
           </div>
-        ))}
-      </div>
+
+          {/* Items */}
+          <div className="flex flex-col gap-4 border-t pt-4">
+            {order.items.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={item.image || "https://via.placeholder.com/60"}
+                    alt={item.name}
+                    className="w-16 h-16 object-cover rounded-md"
+                  />
+                  <div>
+                    <p className="font-medium">{item.name}</p>
+                    {item.selectedSize && <p className="text-gray-500 text-sm">Size: {item.selectedSize}</p>}
+                    {item.selectedColor && <p className="text-gray-500 text-sm">Color: {item.selectedColor}</p>}
+                    <p className="text-gray-500 text-sm">Qty: {item.quantity}</p>
+                  </div>
+                </div>
+                <span className="font-semibold text-gray-800">₹{(item.price * item.quantity).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Total & Status */}
+          <div className="flex justify-between items-center mt-4">
+            <span className="font-bold text-lg">Total:</span>
+            <span className="font-bold text-indigo-600 text-lg">₹{order.total.toFixed(2)}</span>
+          </div>
+
+          {/* Status */}
+          <div className="flex gap-2 mt-3 flex-wrap">
+            {order.status === "ordered" && (
+              <>
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm flex items-center gap-1">
+                  🎉 Ordered
+                </span>
+                <button
+                  onClick={() => updateOrderStatus(order.id, "cancelled")}
+                  className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+            {order.status === "confirmed" && (
+              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm flex items-center gap-1">
+                ✅ Confirmed
+              </span>
+            )}
+            {order.status === "cancelled" && (
+              <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-sm flex items-center gap-1">
+                ❌ Cancelled
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 };

@@ -13,7 +13,7 @@ export const addToCart = async (product) => {
   if (docSnap.exists()) {
     await updateDoc(cartRef, {
       quantity: increment(1),
-      price: product.price,
+  
     });
   } else {
     await setDoc(cartRef, {

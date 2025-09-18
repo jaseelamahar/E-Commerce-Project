@@ -22,6 +22,11 @@ const Signup = () => {
       setError("Passwords do not match!");
       return;
     }
+    if (password.length < 6 || password.length > 8) {
+  setError("Password must be between 6 and 8 characters.");
+  return;
+}
+
 
     try {
       // Check if email already exists in Firestore with admin role
@@ -88,6 +93,8 @@ const Signup = () => {
               id="password"
               required
               value={password}
+              minLength={6}
+               maxLength={8}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               placeholder="Enter password"
@@ -114,6 +121,8 @@ const Signup = () => {
               id="confirmPassword"
               required
               value={confirmPassword}
+              minLength={6}
+                 maxLength={8}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               placeholder="Confirm password"

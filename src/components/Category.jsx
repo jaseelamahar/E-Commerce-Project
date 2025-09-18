@@ -5,7 +5,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import Card from "./Card";
 
 const Category = () => {
-  const { categoryName } = useParams(); // URL param for category
+  const { categoryName } = useParams(); // use name
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,7 +13,6 @@ const Category = () => {
     setLoading(true);
 
     let q;
-
     if (categoryName === "Top Rated") {
       q = query(collection(db, "products"), where("topRated", "==", true));
     } else if (categoryName === "Sale") {
@@ -25,7 +24,9 @@ const Category = () => {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const productList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const productList = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((p) => !p.deleted);
         setProducts(productList);
         setLoading(false);
       },
@@ -35,10 +36,9 @@ const Category = () => {
       }
     );
 
-    return () => unsubscribe(); // cleanup listener
+    return () => unsubscribe();
   }, [categoryName]);
 
-  // Skeleton that matches your Card layout
   const SkeletonCard = () => (
     <div className="border p-4 rounded-lg shadow-sm animate-pulse">
       <div className="bg-gray-300 h-40 w-full rounded mb-4"></div>
@@ -55,14 +55,11 @@ const Category = () => {
     <div className="container mx-auto p-6">
       <h2 className="text-2xl font-bold mb-6">{categoryName}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {loading ? (
-          // Render 8 skeleton placeholders
-          Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
-        ) : products.length > 0 ? (
-          products.map(product => <Card key={product.id} product={product} />)
-        ) : (
-          <p className="text-gray-500">No products found</p>
-        )}
+        {loading
+          ? Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
+          : products.length > 0
+          ? products.map((product) => <Card key={product.id} product={product} />)
+          : <p className="text-gray-500">No products found</p>}
       </div>
     </div>
   );
