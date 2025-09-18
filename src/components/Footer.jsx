@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import footerLogo from "../assets/logo.jpeg";
+import footerLogo from "../assets/Logo.jpeg";
 import footerBg from "../assets/footer.jpeg"; // ✅ import background image
 import {
   FaFacebook,
